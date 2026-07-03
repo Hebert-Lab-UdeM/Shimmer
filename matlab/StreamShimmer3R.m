@@ -200,7 +200,6 @@ fprintf('[Shimmer3R] CSV output: %s\n', csvFilePath);
 % ── Polling Loop ────────────────────────────────────────────────────────
 
 firstPacket = true;
-csvHeaderWritten = false;
 elapsedTime = 0;
 tic;
 
@@ -261,6 +260,14 @@ while elapsedTime < captureDuration_s
         fprintf('[Shimmer3R] Column indices — Timestamp:%d  GSR:%d  PPG:%d\n', ...
                 idxTimestamp, idxGSR, idxPPG);
 
+        % ── CSV Header ─────────────────────────────────────────────
+        %
+        % Write 3-line header on first data packet using the standard
+        % Shimmer CSV header format (newWriteHeadersToFile from
+        % Shimmer-MATLAB-ID v3.0.1).
+        newWriteHeadersToFile(csvFilePath, csvChannelNames, ...
+                              csvChannelFormats, csvChannelUnits);
+
         firstPacket = false;
     end
 
@@ -278,17 +285,6 @@ while elapsedTime < captureDuration_s
     ppgFiltered = zeros(nSamples, 1);
     for iSample = 1:nSamples
         ppgFiltered(iSample) = ppgLpf.filterData(ppgCalibrated(iSample));
-    end
-
-    % ── CSV Output ────────────────────────────────────────────────────
-    %
-    % Write 3-line header on first data packet, then append tab-delimited
-    % data rows.  Uses newWriteHeadersToFile (Shimmer-MATLAB-ID v3.0.1)
-    % which produces the standard Shimmer CSV header format.
-    if firstPacket && ~csvHeaderWritten
-        newWriteHeadersToFile(csvFilePath, csvChannelNames, ...
-                              csvChannelFormats, csvChannelUnits);
-        csvHeaderWritten = true;
     end
 
     % Append data columns: Timestamp | EDA | PPG_Raw | PPG_Filtered
