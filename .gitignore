@@ -19,6 +19,9 @@ python/.venv/
 .DS_Store
 Thumbs.db
 
+# Development docs (specs, tasks, research notes)
+specs/
+
 # Logs and error logs
 matlab/log_files/*.log
 matlab/*.log
