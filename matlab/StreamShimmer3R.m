@@ -178,16 +178,12 @@ clear cleanupHandle;  % triggers onCleanup → disconnectDevice
 
 fprintf('[Shimmer3R] Session complete.\n');
 
-end
-
-
 %% ═══════════════════════════════════════════════════════════════════════════
-%  NESTED CALLBACKS
-%  These functions share scope with the main function's variables.
+%  NESTED CALLBACKS AND CLEANUP
+%  These functions are defined inside StreamShimmer3R and share its workspace.
 % ═══════════════════════════════════════════════════════════════════════════
 
-
-function onConnected(~, ~)
+    function onConnected(~, ~)
 %onConnected — ShimmerDeviceHandler 'DeviceConnected' event callback.
 %
 %   This callback fires twice per session:
@@ -279,15 +275,10 @@ function onConnected(~, ~)
     % the streaming-start branch.
     configured = configured + 1;
 
-end
+    end  % onConnected
 
 
-%% ═══════════════════════════════════════════════════════════════════════════
-%  NESTED CLEANUP FUNCTIONS
-% ═══════════════════════════════════════════════════════════════════════════
-
-
-function disconnectDevice(handler, port)
+    function disconnectDevice(handler, port)
 %disconnectDevice — Clean up Shimmer3R connection on exit, error, or Ctrl-C.
 %
 %   Stops streaming if active, then disconnects the Bluetooth session.
@@ -307,4 +298,6 @@ function disconnectDevice(handler, port)
 
     fprintf('[Shimmer3R] Device disconnected.\n');
 
-end
+    end  % disconnectDevice
+
+end  % StreamShimmer3R
