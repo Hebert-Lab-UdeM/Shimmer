@@ -126,7 +126,81 @@ CHANNEL_TIMESTAMP = 'Timestamp';
 CHANNEL_GSR       = 'GSR_Skin_Resistance';
 CHANNEL_PPG       = 'PPG_A1';
 
+% ── PPG Low-Pass Filter ─────────────────────────────────────────────────
+%
+% 2nd-order Chebyshev LPF at fclpPPG_Hz (default 5 Hz per Bent & Dunn 2021).
+% Filter parameters sourced from params_shimmer3r.m — no magic numbers.
+%
+% FilterClass is carried over from the original Shimmer3 codebase.  Its
+% Chebyshev IIR implementation maintains a state buffer across calls for
+% continuous online filtering of streamed data chunks.
+% Reference: Smith, S.W. (1997). The Scientist and Engineer's Guide to
+%            Digital Signal Processing, Ch. 20.
+ppgLpf = FilterClass(FilterClass.LPF, samplingRate_Hz, fclpPPG_Hz, ...
+                     nPolesPPG, pbRipple_pct);
+
+% ── LSL Outlet ──────────────────────────────────────────────────────────
+
+% Initialize Lab Streaming Layer outlet.
+%   Stream name and source ID from params.
+%   2 channels: EDA (kOhms), PPG (mV), both cf_float32.
+lslOutlet = [];
+if exist('lsl_loadlib', 'file')
+    try
+        lslLib = lsl_loadlib();
+        fprintf('[LSL] Library version: %d\n', lsl_library_version(lslLib));
+
+        lslInfo = lsl_streaminfo(lslLib, lslStreamName, 'shimmer', 2, ...
+                                 samplingRate_Hz, 'cf_float32', lslSourceID);
+
+        % Channel metadata
+        lslChannels = lslInfo.desc().append_child('channels');
+
+        chEda = lslChannels.append_child('channel');
+        chEda.append_child_value('label', 'EDA');
+        chEda.append_child_value('unit', 'kOhms');
+
+        chPpg = lslChannels.append_child('channel');
+        chPpg.append_child_value('label', 'PPG');
+        chPpg.append_child_value('unit', 'mV');
+
+        % Device metadata
+        lslDevice = lslInfo.desc().append_child('device');
+        lslDevice.append_child_value('manufacturer', 'Shimmer');
+        lslDevice.append_child_value('name', hardwareVersionID);
+        lslDevice.append_child_value('label', deviceLabel);
+
+        lslOutlet = lsl_outlet(lslInfo);
+        fprintf('[LSL] Outlet created: "%s" (%d ch, %.1f Hz)\n', ...
+                lslStreamName, 2, samplingRate_Hz);
+    catch lslError
+        warning('StreamShimmer3R:lslInitFailed', ...
+                'LSL outlet creation failed: %s\nLSL streaming disabled.', ...
+                lslError.message);
+    end
+else
+    fprintf('[LSL] liblsl not found on path — LSL streaming disabled.\n');
+end
+
+% ── CSV Output ──────────────────────────────────────────────────────────
+
+% Generate ISO-8601 timestamped filename.
+sessionTimestamp = datetime('now', 'TimeZone', 'UTC');
+sessionTimestamp.Format = 'yyyy-MM-dd''T''HH-mm-ss';
+csvFilename = sprintf('%s_%s.csv', subjectID, char(sessionTimestamp));
+csvFilePath = fullfile(outputDir, csvFilename);
+
+% Column definitions for the 3-line CSV header.
+csvChannelNames = {'Timestamp', 'EDA_kOhms', 'PPG_mV', 'PPG_Filtered_mV'};
+csvChannelFormats = {'CAL', 'CAL', 'CAL', 'CAL'};
+csvChannelUnits = {'ms', 'kOhms', 'mV', 'mV'};
+
+fprintf('[Shimmer3R] CSV output: %s\n', csvFilePath);
+
+% ── Polling Loop ────────────────────────────────────────────────────────
+
 firstPacket = true;
+csvHeaderWritten = false;
 elapsedTime = 0;
 tic;
 
@@ -194,20 +268,55 @@ while elapsedTime < captureDuration_s
     timestamps       = newData(:, idxTimestamp);
     edaCalibrated    = newData(:, idxGSR);
     ppgCalibrated    = newData(:, idxPPG);
+    nSamples         = numel(ppgCalibrated);
 
-    % ── PPG Filter (Task 7 stub) ─────────────────────────────────────
-    ppgFiltered = ppgCalibrated;  % pass-through placeholder
+    % ── PPG Filter ────────────────────────────────────────────────────
+    %
+    % Apply 2nd-order Chebyshev LPF online.  FilterClass maintains an
+    % internal state buffer across calls, enabling continuous filtering
+    % of chunked stream data without edge artefacts between iterations.
+    ppgFiltered = zeros(nSamples, 1);
+    for iSample = 1:nSamples
+        ppgFiltered(iSample) = ppgLpf.filterData(ppgCalibrated(iSample));
+    end
 
-    % ── LSL push_chunk (Task 5 stub) ─────────────────────────────────
-    % outlet.push_chunk([edaCalibrated'; ppgFiltered']);
+    % ── CSV Output ────────────────────────────────────────────────────
+    %
+    % Write 3-line header on first data packet, then append tab-delimited
+    % data rows.  Uses newWriteHeadersToFile (Shimmer-MATLAB-ID v3.0.1)
+    % which produces the standard Shimmer CSV header format.
+    if firstPacket && ~csvHeaderWritten
+        newWriteHeadersToFile(csvFilePath, csvChannelNames, ...
+                              csvChannelFormats, csvChannelUnits);
+        csvHeaderWritten = true;
+    end
 
-    % ── CSV append (Task 6 stub) ─────────────────────────────────────
-    % dlmwrite(csvFilePath, [timestamps edaCalibrated ppgCalibrated ppgFiltered], ...
-    %          '-append', 'delimiter', '\t', 'precision', 16);
+    % Append data columns: Timestamp | EDA | PPG_Raw | PPG_Filtered
+    dlmwrite(csvFilePath, ...
+             [timestamps, edaCalibrated, ppgCalibrated, ppgFiltered], ...
+             '-append', 'delimiter', '\t', 'precision', 16);
+
+    % ── LSL Streaming ─────────────────────────────────────────────────
+    %
+    % Push calibrated EDA and filtered PPG as a [2 × nSamples] float32
+    % chunk to the LSL outlet.
+    if ~isempty(lslOutlet)
+        lslOutMatrix = single([edaCalibrated'; ppgFiltered']);
+        lslOutlet.push_chunk(lslOutMatrix);
+    end
 
 end  % main data loop
 
 fprintf('[Shimmer3R] Streaming loop ended. Elapsed time: %.1f s\n', elapsedTime);
+
+%% ── Packet Rate ───────────────────────────────────────────────────────────
+
+try
+    packetRate = deviceHandler.bluetoothManager.getShimmerDeviceBtConnected(comPort).getPacketReceptionRateOverall();
+    fprintf('[Shimmer3R] Packet reception rate: %.1f %%\n', packetRate);
+catch
+    fprintf('[Shimmer3R] Packet reception rate: unavailable\n');
+end
 
 %% ── Teardown ──────────────────────────────────────────────────────────────
 
