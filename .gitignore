@@ -1,0 +1,26 @@
+# MATLAB
+*.asv
+*.mat
+
+# Large binary data
+matlab/data/*.csv
+matlab/data/*.png
+
+# Python
+python/__pycache__/
+python/*.pyc
+python/.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+matlab/log_files/*.log
+
+# Old Shimmer3 driver (keep for reference, don't track binaries)
+matlab/Resources/*.pdf
