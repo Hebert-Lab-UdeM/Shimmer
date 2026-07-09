@@ -2,14 +2,19 @@
 *.asv
 *.mat
 
-# Large binary data
-matlab/data/*.csv
-matlab/data/*.png
+# Recorded dataset captures (under any versioned matlab/data)
+**/matlab/data/*.csv
+**/matlab/data/*.png
 
-# Python
-python/__pycache__/
-python/*.pyc
-python/.venv/
+# MATLAB runtime logs
+**/matlab/*.log
+**/matlab/log_files/*.log
+**/matlab/examples/*error_log*
+
+# Python (under any versioned python/)
+**/python/__pycache__/
+**/python/*.pyc
+**/python/.venv/
 
 # IDE
 .vscode/
@@ -19,10 +24,5 @@ python/.venv/
 .DS_Store
 Thumbs.db
 
-# Development docs (specs, tasks, research notes)
+# Development docs (specs, tasks, research notes) — not production code
 specs/
-
-# Logs and error logs
-matlab/log_files/*.log
-matlab/*.log
-matlab/examples/*error_log*
