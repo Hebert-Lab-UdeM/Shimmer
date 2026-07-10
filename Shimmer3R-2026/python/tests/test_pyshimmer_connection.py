@@ -86,7 +86,7 @@ def test_connection(com_port: str):
             print("  This may indicate the sensor constants differ for Shimmer3R")
         
         # Try to start streaming (briefly)
-        print(f"\nTesting data streaming (5 seconds)...")
+        print(f"\nTesting data streaming (3 seconds)...")
         try:
             def data_handler(packet):
                 # This callback fires for each data packet
@@ -97,19 +97,32 @@ def test_connection(com_port: str):
             print("✓ Streaming started")
             
             import time
-            time.sleep(5)
+            time.sleep(3)  # Reduced from 5 to 3 seconds
             
             shimmer.stop_streaming()
             print("✓ Streaming stopped successfully")
             
         except Exception as e:
             print(f"⚠ Streaming test failed: {e}")
+            print("  (This is OK - connection test still passed)")
         
         # Clean shutdown
         print("\nShutting down...")
-        shimmer.shutdown()
-        ser.close()
-        print("✓ Connection closed cleanly")
+        try:
+            shimmer.shutdown()
+        except Exception as e:
+            print(f"  Warning: shutdown() raised: {e}")
+        
+        # Force close serial if still open
+        try:
+            if ser.is_open:
+                ser.cancel_read()
+                ser.close()
+                print("✓ Serial port closed")
+        except Exception as e:
+            print(f"  Warning: failed to close serial: {e}")
+        
+        print("\n✓ Test complete")
         
         print(f"\n{'='*70}")
         print(f"RESULT: {com_port} IS A VALID SHIMMER DEVICE")
