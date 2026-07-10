@@ -27,7 +27,11 @@ import serial.tools.list_ports
 
 
 def enumerate_com_ports():
-    """List all available COM ports with metadata."""
+    """List all available COM ports with metadata.
+    
+    Returns:
+        tuple: (all_bluetooth_ports, shimmer_candidate_ports)
+    """
     print("=" * 70)
     print("BLUETOOTH RFCOMM PORT ENUMERATION")
     print("=" * 70)
@@ -37,11 +41,12 @@ def enumerate_com_ports():
     if not ports:
         print("\nNo COM ports found.")
         print("Ensure Bluetooth adapter is enabled and devices are paired.")
-        return []
+        return [], []
     
     print(f"\nFound {len(ports)} COM port(s):\n")
     
-    shimmer_ports = []
+    bluetooth_ports = []
+    shimmer_candidates = []
     
     for i, port in enumerate(ports, 1):
         # port.device: COM port name (e.g., 'COM7')
@@ -59,31 +64,50 @@ def enumerate_com_ports():
         
         # Check if this looks like a Bluetooth device
         is_bluetooth = False
-        if 'Bluetooth' in port.description or 'BT' in port.hwid.upper():
-            is_bluetooth = True
-            print(f"   [BLUETOOTH DETECTED]")
+        bluetooth_keywords = ['Bluetooth', 'BT', 'RFCOMM', 'Wireless']
+        for kw in bluetooth_keywords:
+            if kw in port.description or kw in port.hwid.upper():
+                is_bluetooth = True
+                break
+        
+        if is_bluetooth:
+            print(f"   [BLUETOOTH PORT]")
+            bluetooth_ports.append(port)
         
         # Check if this looks like a Shimmer device
         is_shimmer = False
-        shimmer_keywords = ['SHIMMER', 'Shimmer', 'GSR', 'PPG']
+        shimmer_keywords = ['SHIMMER', 'Shimmer', 'GSR', 'PPG', 'ExG']
         for keyword in shimmer_keywords:
             if keyword in port.name or keyword in port.description or keyword in port.hwid:
                 is_shimmer = True
                 print(f"   [SHIMMER LIKELY: matched '{keyword}']")
                 break
         
-        if is_bluetooth and is_shimmer:
-            shimmer_ports.append(port)
-            print(f"   >>> CANDIDATE FOR SHIMMER3R <<<")
+        # Shimmer3R creates TWO COM ports: one for bootloader, one for streaming
+        # If we see consecutive COM ports (e.g., COM4, COM5), both are likely Shimmer
+        if is_bluetooth:
+            shimmer_candidates.append(port)
+            if not is_shimmer:
+                print(f"   [POSSIBLE SHIMMER: Bluetooth port without explicit name]")
         
         print()
     
-    return shimmer_ports
+    return bluetooth_ports, shimmer_candidates
 
 
-def test_port_connectivity(port_name: str, timeout: float = 2.0) -> bool:
-    """Attempt to open the COM port and verify it responds."""
-    print(f"Testing connectivity to {port_name}...")
+def test_shimmer_handshake(port_name: str, timeout: float = 2.0) -> tuple[bool, dict]:
+    """Attempt to communicate with a Shimmer device on the given COM port.
+    
+    This sends Shimmer LogAndStream protocol commands and checks for valid responses.
+    
+    Args:
+        port_name: COM port name (e.g., 'COM4')
+        timeout: Serial timeout in seconds
+        
+    Returns:
+        tuple: (success: bool, info: dict with device info if successful)
+    """
+    print(f"Testing {port_name} for Shimmer device...")
     
     try:
         # Standard baud rate for Shimmer LogAndStream firmware
@@ -98,93 +122,133 @@ def test_port_connectivity(port_name: str, timeout: float = 2.0) -> bool:
             stopbits=serial.STOPBITS_ONE,
         )
         
-        # Try to read any pending data (should be empty if device is idle)
+        # Clear buffers
         ser.reset_input_buffer()
         ser.reset_output_buffer()
         
-        # Send a ping command (0x01) to test responsiveness
-        # This is the Shimmer "ping" command in LogAndStream protocol
-        ser.write(b'\x01')
+        # Shimmer LogAndStream protocol: send CMD_GET_DEVICE_INFO (0x09)
+        # This should return device information if it's a Shimmer
+        # Command format: [command_byte]
+        ser.write(b'\x09')
         
-        # Wait for response (should receive ACK within timeout)
-        response = ser.read(1)
+        # Wait for response
+        # Shimmer should respond with: [ACK, command_id, data_length, data..., checksum]
+        response = ser.read(100)  # Read up to 100 bytes
         
         ser.close()
         
-        if response:
-            print(f"  ✓ Port {port_name} responded (received {len(response)} byte(s))")
-            return True
+        if len(response) >= 3:
+            # Check if response starts with ACK (0x00 or 0x01 depending on firmware)
+            if response[0] in [0x00, 0x01, 0x09]:
+                print(f"  ✓ {port_name} responded with valid Shimmer protocol")
+                print(f"    Response: {len(response)} bytes, first bytes: {response[:10].hex()}")
+                
+                # Try to extract hardware version from response
+                # This is a simplified check; full parsing would require protocol knowledge
+                info = {
+                    'port': port_name,
+                    'response_length': len(response),
+                    'response_hex': response[:20].hex(),
+                }
+                return True, info
+            else:
+                print(f"  ⚠ {port_name} responded but not with Shimmer protocol (first byte: 0x{response[0]:02x})")
+                return False, {}
         else:
-            print(f"  ⚠ Port {port_name} opened but did not respond to ping")
-            print(f"    (Device may be asleep, out of range, or already connected)")
-            return True  # Port exists, even if device not responsive
+            print(f"  ⚠ {port_name} opened but did not respond to Shimmer handshake")
+            print(f"    (Device may be asleep, out of range, already connected, or not a Shimmer)")
+            return False, {}
             
     except serial.SerialException as e:
         print(f"  ✗ Failed to open {port_name}: {e}")
-        return False
+        return False, {}
     except OSError as e:
         print(f"  ✗ OS error accessing {port_name}: {e}")
-        return False
+        return False, {}
 
 
 def main():
     """Main test routine."""
     print("\nShimmer3R Phase 2 — Bluetooth Enumeration Test")
-    print("This script verifies that paired Shimmer3R devices are visible as COM ports.\n")
+    print("=" * 70)
+    print("\nNOTE: Windows labels all Bluetooth serial ports generically.")
+    print("This test will try Shimmer protocol on each Bluetooth COM port")
+    print("to identify which one(s) are Shimmer devices.\n")
     
     # Step 1: Enumerate all COM ports
-    shimmer_ports = enumerate_com_ports()
+    bluetooth_ports, shimmer_candidates = enumerate_com_ports()
     
-    if not shimmer_ports:
-        print("\n⚠ WARNING: No Shimmer devices detected in COM port list.")
+    if not bluetooth_ports:
+        print("\n⚠ WARNING: No Bluetooth COM ports detected.")
         print("\nTroubleshooting:")
-        print("  1. Ensure Shimmer3R is powered on (LED should blink)")
-        print("  2. Pair the device via Windows Settings → Bluetooth & devices")
-        print("  3. Check that the device appears in Device Manager → Ports (COM & LPT)")
-        print("  4. Verify the COM port number (e.g., COM7)")
+        print("  1. Ensure Bluetooth adapter is enabled")
+        print("  2. Pair the Shimmer3R via Windows Settings → Bluetooth & devices")
+        print("  3. Check Device Manager → Ports (COM & LPT) for new entries")
         print("\nRetrying in 5 seconds...")
         import time
         time.sleep(5)
-        shimmer_ports = enumerate_com_ports()
+        bluetooth_ports, shimmer_candidates = enumerate_com_ports()
     
-    if not shimmer_ports:
-        print("\n✗ No Shimmer ports found after retry. Exiting.")
+    if not bluetooth_ports:
+        print("\n✗ No Bluetooth COM ports found after retry. Exiting.")
         sys.exit(1)
     
-    # Step 2: Test connectivity to each candidate port
-    print("\n" + "=" * 70)
-    print("CONNECTIVITY TEST")
+    print(f"\nFound {len(bluetooth_ports)} Bluetooth COM port(s).")
+    print("Testing each for Shimmer LogAndStream protocol...\n")
+    
+    # Step 2: Test Shimmer handshake on all Bluetooth ports
+    print("=" * 70)
+    print("SHIMMER PROTOCOL HANDSHAKE TEST")
     print("=" * 70 + "\n")
     
-    working_ports = []
-    for port in shimmer_ports:
-        if test_port_connectivity(port.device):
-            working_ports.append(port.device)
+    shimmer_ports = []
+    for port in bluetooth_ports:
+        success, info = test_shimmer_handshake(port.device)
+        if success:
+            shimmer_ports.append((port, info))
     
     # Step 3: Report results
     print("\n" + "=" * 70)
     print("SUMMARY")
     print("=" * 70 + "\n")
     
-    if working_ports:
-        print(f"✓ Found {len(working_ports)} working Shimmer COM port(s):")
-        for i, port in enumerate(working_ports, 1):
-            print(f"  {i}. {port}")
+    if shimmer_ports:
+        print(f"✓ Found {len(shimmer_ports)} Shimmer device(s):\n")
+        for i, (port, info) in enumerate(shimmer_ports, 1):
+            print(f"  {i}. {port.device}")
+            print(f"     Description: {port.description}")
+            print(f"     Response: {info['response_length']} bytes")
         
         print("\n✓ Bluetooth enumeration test PASSED")
-        print("\nNext steps:")
-        print("  1. Note the COM port number(s) above")
-        print("  2. Update params_shimmer3r.py with the correct COM port")
-        print("  3. Run the main streaming script: python shimmer3r_gsr_bt.py")
+        
+        if len(shimmer_ports) >= 2:
+            print("\nNOTE: Multiple Shimmer ports detected (typical for Shimmer3R).")
+            print("  - Shimmer3R creates TWO COM ports:")
+            print("    * Lower number: Bootloader (firmware updates)")
+            print("    * Higher number: Streaming (LogAndStream protocol)")
+            print("  - Use the HIGHER port number for streaming\n")
+            streaming_port = max(shimmer_ports, key=lambda x: int(x[0].device.replace('COM', '')))
+            print(f"  >>> RECOMMENDED FOR STREAMING: {streaming_port[0].device} <<<\n")
+        
+        print("Next steps:")
+        print(f"  1. Update params_shimmer3r.py with COM_PORT = '{shimmer_ports[-1][0].device}'")
+        print("  2. Run the main streaming script: python shimmer3r_gsr_bt.py")
         
     else:
-        print("✗ No working Shimmer COM ports found.")
+        print("✗ No Shimmer devices detected on any Bluetooth COM port.")
         print("\nTroubleshooting:")
-        print("  1. Ensure Shimmer3R is charged and powered on")
+        print("  1. Ensure Shimmer3R is charged and powered on (LED should blink)")
         print("  2. Check that the device is within Bluetooth range (<10m)")
-        print("  3. Verify no other application is using the COM port")
-        print("  4. Try unpairing and re-pairing the device")
+        print("  3. Verify no other application is using the COM port:")
+        print("     - Close Consensys, MATLAB, or other Shimmer software")
+        print("     - Check Task Manager for background processes")
+        print("  4. Try unpairing and re-pairing the device:")
+        print("     - Settings → Bluetooth & devices → Remove device")
+        print("     - Power cycle Shimmer3R (hold button 5s)")
+        print("     - Pair again")
         print("  5. Restart the Bluetooth service or reboot the PC")
+        print("  6. Check Device Manager → Ports (COM & LPT) for error indicators")
+        print("\nIf problems persist, try the pyshimmer-compat-notes.md troubleshooting guide.")
         sys.exit(1)
     
     print()
