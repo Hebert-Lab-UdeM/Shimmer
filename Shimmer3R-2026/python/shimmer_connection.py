@@ -157,11 +157,12 @@ def connect_to_shimmer(
     
     try:
         # Create ShimmerBluetooth instance
-        # pyshimmer will auto-detect hardware revision during initialize()
-        # Note: revision parameter added in pyshimmer v1.0+, using None for compatibility
+        # revision=None lets pyshimmer auto-detect during initialize()
+        # disable_status_ack=True is required for firmware >= 0.15.4
         shimmer = ShimmerBluetooth(
             ser,
-            disable_status_ack=True,  # Required for firmware >= 0.15.4
+            revision=None,  # Auto-detect hardware revision during initialize()
+            disable_status_ack=True,
         )
         
         # Initialize connection (queries device info, disables status ack)
