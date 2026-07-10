@@ -24,11 +24,8 @@ from dataclasses import dataclass
 
 import serial
 from pyshimmer import ShimmerBluetooth
-# Import revision classes - path may vary by pyshimmer version
-try:
-    from pyshimmer.dev.revisions import Shimmer3RRevision
-except ImportError:
-    from pyshimmer import Shimmer3RRevision
+# Note: pyshimmer auto-detects hardware revision during initialize()
+# No need to specify revision class explicitly
 
 
 @dataclass
@@ -159,21 +156,11 @@ def connect_to_shimmer(
         print(f"  Initializing pyshimmer interface...")
     
     try:
-        # Create ShimmerBluetooth instance with Shimmer3R revision
-        # This ensures correct protocol handling for Shimmer3R hardware
-        # If Shimmer3RRevision is not available, pyshimmer will auto-detect
-        try:
-            revision = Shimmer3RRevision()
-            if verbose:
-                print(f"  Using Shimmer3R revision explicitly")
-        except Exception:
-            revision = None  # Let pyshimmer auto-detect
-            if verbose:
-                print(f"  Using pyshimmer auto-detection for hardware revision")
-        
+        # Create ShimmerBluetooth instance
+        # pyshimmer will auto-detect hardware revision during initialize()
         shimmer = ShimmerBluetooth(
             ser,
-            revision=revision,
+            revision=None,  # Auto-detect hardware revision
             disable_status_ack=True,  # Required for firmware >= 0.15.4
         )
         
