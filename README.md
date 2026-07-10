@@ -49,3 +49,18 @@ The following materials are intentionally **not** tracked in this repository:
 - Raw serial captures (`realtermBuffer/*.dat`).
 - The 471 MB LSL-recorded dataset `subj-B_789.xdf`.
 - Per-development error logs in `examples/`.
+
+## Lab Streaming Layer (LSL) Setup
+
+Both MATLAB implementations bundle the LSL MATLAB bindings directly:
+
+- **Shimmer3-2022**: `matlab/LSL/`
+- **Shimmer3R-2026**: `matlab/LSL/`
+
+The bindings are copied from https://github.com/labstreaminglayer/liblsl-Matlab
+
+To update LSL:
+```bash
+cd Shimmer3-2022/matlab/LSL
+git pull
+```

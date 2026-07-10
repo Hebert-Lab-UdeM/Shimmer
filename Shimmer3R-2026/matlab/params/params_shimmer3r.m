@@ -42,10 +42,11 @@ PARAMS.subjectID = 'subj01';
 %   Relative paths are resolved from the directory containing StreamShimmer3R.m.
 PARAMS.outputDir = './data/';
 
-% Full path to the liblsl MATLAB bindings (liblsl-Matlab/ folder).
-%   Edit this to match the LSL installation on the acquisition PC.
-%   Example for USB-drive install: 'F:\EOA\AUDACE\LSL\liblsl-Matlab\'
-PARAMS.lslLibPath = 'F:\EOA\AUDACE\LSL\liblsl-Matlab\';
+% Full path to the liblsl MATLAB bindings.
+%   LSL is bundled in matlab/LSL/
+%   If using a custom LSL installation, edit this path accordingly.
+%   Note: This path is computed relative to the script location at runtime.
+PARAMS.lslLibPath = '';  % Computed in StreamShimmer3R.m from scriptDir
 
 %% ── LSL Streaming ─────────────────────────────────────────────────────────
 

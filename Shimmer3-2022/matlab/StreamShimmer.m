@@ -187,20 +187,17 @@ if ~isdeployed
 
     % Supporting LSL functions
     if enable_lsl
-        % Define LSL installation directory based on the current PC USER
-        [~, hostname] = system('hostname');
-        hostname = strtrim(hostname);
-        switch hostname
-            case 'MSI'
-                LSL_PATH = 'D:\labstreaminglayer-1.0.31\labstreaminglayer\';
-            case 'I155198-eoa'
-                LSL_PATH = 'C:/Users/LARNA/Documents/MATLAB/Acute_Tinnitus/labstreaminglayer';
-            otherwise
-                LSL_PATH = 'F:\EOA\AUDACE\'; % USB dongle
-        end
+        % LSL is bundled in matlab/LSL/
+        scriptDir = mfilename('fullpath');
+        LSL_PATH = fullfile(fileparts(scriptDir), 'LSL');
     
         % Add the LSL installation directory to matlab path
-        addpath(genpath(fullfile(LSL_PATH, 'LSL', 'liblsl-Matlab')));
+        if exist(LSL_PATH, 'dir')
+            addpath(genpath(LSL_PATH));
+        else
+            warning('StreamShimmer:lslPathMissing', ...
+                'Bundled LSL path not found: %s\nLSL streaming disabled.', LSL_PATH);
+        end
     end
 end
 

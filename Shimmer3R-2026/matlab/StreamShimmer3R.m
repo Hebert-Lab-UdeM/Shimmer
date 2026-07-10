@@ -35,6 +35,12 @@ addpath(fullfile(scriptDir, 'params'));
 
 PARAMS = params_shimmer3r();
 
+% Compute LSL library path relative to script location
+% LSL is bundled in matlab/LSL/
+if isempty(PARAMS.lslLibPath)
+    PARAMS.lslLibPath = fullfile(scriptDir, '..', 'LSL');
+end
+
 % Extract frequently accessed parameters into local variables to avoid
 % repeated struct field access in the inner loop.
 comPort                 = PARAMS.comPort;
