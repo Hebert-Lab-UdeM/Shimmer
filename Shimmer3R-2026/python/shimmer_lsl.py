@@ -298,7 +298,7 @@ def verify_lsl_outlet(
         - device_label: str
     """
     
-    from pylsl import resolve_streams, resolve_byprop, local_clock
+    from pylsl import resolve_streams, local_clock
     
     results = {
         'discoverable': False,
@@ -318,9 +318,9 @@ def verify_lsl_outlet(
     
     # Try to resolve stream by source_id
     try:
-        # Get source_id from outlet (stored when created)
-        # We'll resolve and match
-        streams = resolve_streams(timeout_s)
+        # Resolve all streams with timeout
+        # resolve_streams returns immediately with currently visible streams
+        streams = resolve_streams(timeout=timeout_s)
         
         for stream in streams:
             if stream.source_id() == 'shimmer3r_001':
