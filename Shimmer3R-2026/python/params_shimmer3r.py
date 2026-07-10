@@ -34,7 +34,7 @@ class Shimmer3RParams:
     
     #: Shimmer3R device identifier (4 characters printed on back of unit)
     #: Used in LSL device metadata and log file naming
-    DEVICE_LABEL: str = 'D284'
+    DEVICE_LABEL: str = 'BE7E'
     
     #: Bluetooth MAC address (optional, for pyshimmer direct connection)
     #: Format: "00:06:66:AB:CD:EF" (leave empty to use COM port)
