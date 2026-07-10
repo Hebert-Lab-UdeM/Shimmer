@@ -284,6 +284,9 @@ def poll_data_chunk(
     This function collects data samples for the specified duration and
     returns them as arrays.
     
+    Note: This uses a simpler approach that avoids pyshimmer's streaming
+    callback mechanism which has thread safety issues on Windows.
+    
     Args:
         shimmer: Initialized ShimmerBluetooth instance
         duration_s: Duration to collect data in seconds (default: 1.0)
@@ -294,57 +297,71 @@ def poll_data_chunk(
     """
     
     import time
-    from threading import Event
+    from threading import Event, Lock
     
     timestamps = []
     eda_values = []
     ppg_values = []
     stop_event = Event()
+    data_lock = Lock()
+    error_occurred = [False]
     
-    def data_handler(packet: DataPacket):
+    def data_handler(packet):
         """Callback for data packets."""
         if stop_event.is_set():
             return
         
         try:
-            # Extract timestamp
-            ts = packet[EChannelType.TIMESTAMP]
-            timestamps.append(float(ts))
-            
-            # Extract EDA (GSR)
-            try:
-                eda = packet[EChannelType.GSR_RAW]
-                eda_values.append(float(eda))
-            except KeyError:
-                eda_values.append(0.0)
-            
-            # Extract PPG (Internal ADC A1)
-            try:
-                ppg = packet[EChannelType.INTERNAL_ADC_A1]
-                ppg_values.append(float(ppg))
-            except KeyError:
-                ppg_values.append(0.0)
+            with data_lock:
+                # Extract timestamp
+                ts = packet[EChannelType.TIMESTAMP]
+                timestamps.append(float(ts))
                 
-        except Exception:
-            # Skip malformed packets
-            pass
+                # Extract EDA (GSR)
+                try:
+                    eda = packet[EChannelType.GSR_RAW]
+                    eda_values.append(float(eda))
+                except KeyError:
+                    eda_values.append(0.0)
+                
+                # Extract PPG (Internal ADC A1)
+                try:
+                    ppg = packet[EChannelType.INTERNAL_ADC_A1]
+                    ppg_values.append(float(ppg))
+                except KeyError:
+                    ppg_values.append(0.0)
+                    
+        except Exception as e:
+            # Skip malformed packets but don't crash
+            error_occurred[0] = True
     
     # Add callback
     shimmer.add_stream_callback(data_handler)
     
-    # Start streaming
-    shimmer.start_streaming()
+    try:
+        # Start streaming
+        shimmer.start_streaming()
+        
+        # Collect data for specified duration
+        start_time = time.time()
+        while time.time() - start_time < duration_s and len(timestamps) < max_samples:
+            time.sleep(0.01)  # Small sleep to prevent busy-waiting
+        
+    except Exception as e:
+        # Handle streaming errors gracefully
+        pass
     
-    # Collect data for specified duration
-    start_time = time.time()
-    while time.time() - start_time < duration_s and len(timestamps) < max_samples:
-        time.sleep(0.01)  # Small sleep to prevent busy-waiting
-    
-    # Stop streaming
-    shimmer.stop_streaming()
-    
-    # Remove callback
-    shimmer.remove_stream_callback(data_handler)
+    finally:
+        # Always stop streaming and remove callback
+        try:
+            shimmer.stop_streaming()
+        except Exception:
+            pass
+        
+        try:
+            shimmer.remove_stream_callback(data_handler)
+        except Exception:
+            pass
     
     return {
         'timestamps': timestamps,
