@@ -126,11 +126,12 @@ fprintf('[Shimmer3R] Data stream active. Hardware: %s\n', hardwareVersionID);
 
 % Target channel names — confirmed from live Shimmer3R device 2026-07-03.
 %   GSR_Skin_Resistance  → calibrated EDA in kOhms
-%   PPG_A1               → calibrated photoplethysmography in mV
+%   PPG_A1 (Shimmer3R) / PPG_A13 (Shimmer3) → calibrated PPG in mV
 %   Timestamp             → device-local timestamp in ms
 CHANNEL_TIMESTAMP = 'Timestamp';
 CHANNEL_GSR       = 'GSR_Skin_Resistance';
-CHANNEL_PPG       = 'PPG_A1';
+% PPG channel name is dynamic: ppgChannelName defaults to 'PPG_A1' and is
+% overridden to 'PPG_A13' in onConnected when the hardware is a Shimmer3.
 
 % ── PPG Low-Pass Filter ─────────────────────────────────────────────────
 %
@@ -254,13 +255,13 @@ while elapsedTime < captureDuration_s
         % Find column indices for our target channels.
         idxTimestamp = find(ismember(signalNames, CHANNEL_TIMESTAMP), 1);
         idxGSR       = find(ismember(signalNames, CHANNEL_GSR), 1);
-        idxPPG       = find(ismember(signalNames, CHANNEL_PPG), 1);
+        idxPPG       = find(ismember(signalNames, ppgChannelName), 1);
 
         if isempty(idxTimestamp) || isempty(idxGSR) || isempty(idxPPG)
             error('StreamShimmer3R:missingChannel', ...
-                  'Required channels not found in signal list.\n' + ...
-                  '  Expected: %s, %s, %s', ...
-                  CHANNEL_TIMESTAMP, CHANNEL_GSR, CHANNEL_PPG);
+                  ['Required channels not found in signal list.\n' ...
+                   '  Expected: %s, %s, %s'], ...
+                  CHANNEL_TIMESTAMP, CHANNEL_GSR, ppgChannelName);
         end
 
         fprintf('[Shimmer3R] Column indices — Timestamp:%d  GSR:%d  PPG:%d\n', ...
