@@ -38,7 +38,7 @@ PARAMS = params_shimmer3r();
 % Compute LSL library path relative to script location
 % LSL is bundled in matlab/LSL/
 if isempty(PARAMS.lslLibPath)
-    PARAMS.lslLibPath = fullfile(scriptDir, '..', 'LSL');
+    PARAMS.lslLibPath = fullfile(scriptDir, 'LSL');
 end
 
 % Extract frequently accessed parameters into local variables to avoid
@@ -208,9 +208,20 @@ fprintf('[Shimmer3R] CSV output: %s\n', csvFilePath);
 
 firstPacket = true;
 elapsedTime = 0;
+sampleCount = 0;        % total calibrated samples received
+lastReportSecond = -1;  % last second at which a progress line was printed
+lastEda = NaN;          % most recent EDA value (for heartbeat display)
+lastPpg = NaN;          % most recent PPG value (for heartbeat display)
 tic;
 
 while elapsedTime < captureDuration_s
+
+    % Once-per-second heartbeat: proves the loop is alive and shows data flow.
+    if floor(elapsedTime) > lastReportSecond
+        lastReportSecond = floor(elapsedTime);
+        fprintf('[Shimmer3R] t=%4.0fs  samples=%d  EDA=%.2f kOhms  PPG=%.3f mV\n', ...
+                elapsedTime, sampleCount, lastEda, lastPpg);
+    end
 
     pause(delayPeriod_s);
 
@@ -283,6 +294,10 @@ while elapsedTime < captureDuration_s
     edaCalibrated    = newData(:, idxGSR);
     ppgCalibrated    = newData(:, idxPPG);
     nSamples         = numel(ppgCalibrated);
+
+    sampleCount = sampleCount + nSamples;
+    lastEda = edaCalibrated(end);
+    lastPpg = ppgCalibrated(end);
 
     % ── PPG Filter ────────────────────────────────────────────────────
     %
