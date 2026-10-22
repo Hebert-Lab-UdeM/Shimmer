@@ -14,22 +14,30 @@ classdef ShimmerDeviceHandler < handle
     
     methods
         function this = ShimmerDeviceHandler()
-            % List of JARs you want to add
+            % List of JARs you want to add (all live in resources/libs/)
             jarsToAdd = {
                 'ShimmerBiophysicalProcessingLibrary_Rev_0_10.jar'
-                'libs/ShimmerJavaClass.jar'
-                'libs/jssc-2.9.6.jar'
-                'libs/vecmath-1.3.1.jar'
-                'libs/commons-lang3-3.8.1.jar'
+                'ShimmerJavaClass.jar'
+                'jssc-2.9.6.jar'
+                'vecmath-1.3.1.jar'
+                'commons-lang3-3.8.1.jar'
+                'commons-math-2.2.jar'
+                'commons-math3-3.6.jar'
+                'guava-19.0.jar'
             };
+            
+            % This classdef lives in resources/helpers/, while the JARs are
+            % one level up in resources/libs/. Resolve libsDir explicitly
+            % rather than relative to this file's own directory.
+            classDefDir = fileparts(mfilename('fullpath'));
+            libsDir = fullfile(fileparts(classDefDir), 'libs');
             
             % Get current dynamic classpath
             currentClasspath = javaclasspath('-dynamic');
             
             for i = 1:numel(jarsToAdd)
                 jarPath = jarsToAdd{i};
-                classDefDir = fileparts(mfilename('fullpath'));
-                fullJarPath = fullfile(classDefDir, jarPath);  % Resolve relative to this file's directory
+                fullJarPath = fullfile(libsDir, jarPath);  % Resolve relative to resources/libs/
             
                 % Check if the jar is already in classpath (case-insensitive)
                 isInClasspath = any(strcmpi(currentClasspath, fullJarPath));

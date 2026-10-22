@@ -9282,17 +9282,17 @@ classdef ShimmerHandleClass < handle   % Inherit from super class 'handle'
                         if (~isempty(shimmerResponse) && (shimmerResponse(1) == thisShimmer.SHIMMER_VERSION_RESPONSE))    
                             thisShimmer.ShimmerVersion = shimmerResponse(2);
                         else
-                            thisShimmer.ShimmerVersion = 'NaN';
+                            thisShimmer.ShimmerVersion = NaN;
                             fprintf(strcat('Warning: readshimmerversion - Shimmer version command response expected but not returned for Shimmer COM',thisShimmer.ComPort,'.\n'));
                             isRead = false;
                         end
                     else
-                        thisShimmer.ShimmerVersion = 'NaN';
+                        thisShimmer.ShimmerVersion = NaN;
                         fprintf(strcat('Warning: readshimmerversion - Shimmer version command response expected but not returned for Shimmer COM',thisShimmer.ComPort,'.\n'));
                         isRead = false;
                     end
             else
-                thisShimmer.ShimmerVersion = 'NaN';
+                thisShimmer.ShimmerVersion = NaN;
                 isRead = false;
                 fprintf(strcat('Warning: readshimmerversion - Cannot get Shimmer version reponse for COM ',thisShimmer.ComPort,' as Shimmer is not connected.\n'));
             end
